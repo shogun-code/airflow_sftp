@@ -1,10 +1,13 @@
-from airflow.sdk import dag, task, Context
-from airflow.operators.python import PythonOperator
+from airflow.sdk import dag, task
+from airflow.utils.trigger_rule import TriggerRule
+
+from typing import List
+
 from helper.discover_files_recursive import discover_files_recursive
 from helper.check_sink_files import check_sink_files
 from helper.create_sink_directories import create_sink_directories
 from helper.sync_files_batch import sync_files_batch
-from typing import List
+from helper.cleanup_temp_files import cleanup_temp_files
 
 import logging
 
@@ -33,11 +36,17 @@ def sync_processing():
     def sync_files_task(files_need_sync):
         sync_files_batch(files_need_sync)
 
+    # Task 5: Cleanup
+    @task(
+            task_id='cleanup_temp_files',
+            trigger_rule=TriggerRule.ALL_DONE
+            )
+    def cleanup_task():
+        cleanup_temp_files()
+
     files_to_sync = discover_files_task()
-    #logging.info(f"files_to_sync: {files_to_sync}")
     files_need_sync = check_files_task(files_to_sync)
-    #logging.info(f"files_need_sync: {files_need_sync}")
-    create_dirs_task(files_need_sync) >> sync_files_task(files_need_sync)
+    create_dirs_task(files_need_sync) >> sync_files_task(files_need_sync) >> cleanup_task()
 
 
 sync_processing()
