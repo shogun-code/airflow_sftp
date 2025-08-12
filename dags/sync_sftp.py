@@ -2,6 +2,7 @@ from airflow.sdk import dag, task
 from airflow.utils.trigger_rule import TriggerRule
 
 from typing import List
+from datetime import timedelta
 
 from helper.discover_files_recursive import discover_files_recursive
 from helper.check_sink_files import check_sink_files
@@ -10,9 +11,31 @@ from helper.sync_files_batch import sync_files_batch
 from helper.cleanup_temp_files import cleanup_temp_files
 
 import logging
+import pendulum
+
+# DAG Configuration
+DAG_ID = "sftp_to_sftp_sync"
+
+default_args = {
+    'owner': 'airflow',
+    'depends_on_past': False,
+    'start_date': pendulum.datetime(2025, 8, 10, tz="UTC"),
+    'email_on_failure': True,
+    'email_on_retry': False,
+    'retries': 2,
+    'retry_delay': timedelta(minutes = 5),
+    'catchup': False,
+}
 
 # DAG Definition
-@dag
+@dag(
+        DAG_ID,
+        default_args = default_args,
+        description = 'Sync data recursively between two SFTP servers',
+        schedule = "0 0 * * *", # 7:00 at VN
+        max_active_runs = 1,
+        tags = ['sftp', 'sync', 'data-transfer'],
+)
 def sync_processing():
     # Task 1: Discover files recursively from source
     @task(task_id='discover_files_task')
