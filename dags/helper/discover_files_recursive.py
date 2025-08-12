@@ -3,12 +3,7 @@ import logging, os
 from airflow.providers.sftp.hooks.sftp import SFTPHook
 from typing import List, Dict, Any
 
-# Connection IDs (configure these in Airflow UI)
-SFTP_SOURCE_CONN_ID = "sftp_source"
-SFTP_SINK_CONN_ID = "sftp_sink"
-
-# Configuration variables
-SOURCE_BASE_PATH = "/upload"
+from .common import SFTP_SOURCE_CONN_ID, SOURCE_BASE_PATH
 
 def discover_files_recursive(**context) -> List[Dict[str, Any]]:
     """

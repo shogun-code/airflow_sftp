@@ -1,6 +1,6 @@
 import logging, os
 
-TEMP_LOCAL_PATH  = "/tmp/sftp_sync"
+from .common import *
 
 def cleanup_temp_files():
     """Clean up temporary files and directories."""

@@ -3,13 +3,7 @@ import logging, os
 from airflow.providers.sftp.hooks.sftp import SFTPHook
 from typing import List, Dict, Any
 
-# Connection IDs (configure these in Airflow UI)
-SFTP_SOURCE_CONN_ID = "sftp_source"
-SFTP_SINK_CONN_ID = "sftp_sink"
-
-# Configuration variables
-SOURCE_BASE_PATH = "/upload"
-SINK_BASE_PATH   = "/upload"
+from .common import *
 
 def check_sink_files(files_to_sync) -> List[Dict[str, Any]]:
     """

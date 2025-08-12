@@ -1,16 +1,8 @@
 from airflow.providers.sftp.hooks.sftp import SFTPHook
 from typing import List, Dict, Any
+from .common import *
 
 import logging, os
-
-# Connection IDs (configure these in Airflow UI)
-SFTP_SOURCE_CONN_ID = "sftp_source"
-SFTP_SINK_CONN_ID = "sftp_sink"
-
-# Configuration variables
-SOURCE_BASE_PATH = "/upload"
-SINK_BASE_PATH   = "/upload"
-TEMP_LOCAL_PATH  = "/tmp/sftp_sync"
 
 def sync_files_batch(files_need_sync):
     """
