@@ -37,7 +37,9 @@ def check_sink_files(files_to_sync) -> List[Dict[str, Any]]:
                     if (file_info['modified_time'] > sink_stat.st_mtime or 
                         file_info['size'] != sink_stat.st_size):
                         needs_sync = True
-                        logging.info(f"File needs update: {sink_path}")
+                        logging.info(f"--File needs update: {sink_path}")
+                        logging.info(f"Detail:, source_modified_time: {file_info['modified_time']}, sink_modified_time: {sink_stat.st_mtime}")
+                        logging.info(f"Detail:, source_size: {file_info['size']}, sink_size: {sink_stat.st_size}")
                     else:
                         logging.info(f"File up to date: {sink_path}")
                         

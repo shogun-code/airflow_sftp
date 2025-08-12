@@ -2,6 +2,8 @@ from airflow.sdk import dag, task, Context
 from airflow.operators.python import PythonOperator
 from helper.discover_files_recursive import discover_files_recursive
 from helper.check_sink_files import check_sink_files
+from helper.create_sink_directories import create_sink_directories
+from helper.sync_files_batch import sync_files_batch
 from typing import List
 
 import logging
@@ -12,17 +14,30 @@ def sync_processing():
     # Task 1: Discover files recursively from source
     @task(task_id='discover_files_task')
     def discover_files_task() -> List:
-        data = discover_files_recursive()
-        return data
+        files_to_sync = discover_files_recursive()
+        return files_to_sync
 
     # Task 2: Check which files need syncing
     @task(task_id='check_sink_files')
-    def check_files_task(data):
-        check_sink_files(data)
+    def check_files_task(files_to_sync):
+        files_need_sync = check_sink_files(files_to_sync)
+        return files_need_sync
 
-    data = discover_files_task()
-    #files = []
-    #files.extend(x['remote_path'] for x in data)
-    check_files_task(data)
+    # Task 3: Create necessary directories
+    @task(task_id='create_sink_directories')
+    def create_dirs_task(files_need_sync):
+        create_sink_directories(files_need_sync)
+
+    # Task 4: Sync files
+    @task(task_id='sync_files_batch')
+    def sync_files_task(files_need_sync):
+        sync_files_batch(files_need_sync)
+
+    files_to_sync = discover_files_task()
+    #logging.info(f"files_to_sync: {files_to_sync}")
+    files_need_sync = check_files_task(files_to_sync)
+    #logging.info(f"files_need_sync: {files_need_sync}")
+    create_dirs_task(files_need_sync) >> sync_files_task(files_need_sync)
+
 
 sync_processing()
