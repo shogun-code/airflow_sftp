@@ -51,7 +51,7 @@ def discover_files_recursive(**context) -> List[Dict[str, Any]]:
         logging.info(f"Discovered {len(files_to_sync)} files for synchronization")
         
         # Store the file list in XCom for next task
-        context['task_instance'].xcom_push(key='files_to_sync', value=files_to_sync)
+        # context['task_instance'].xcom_push(key='files_to_sync', value=files_to_sync)
         
         return files_to_sync
         
