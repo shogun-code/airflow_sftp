@@ -9,6 +9,7 @@ from helper.check_sink_files import check_sink_files
 from helper.create_sink_directories import create_sink_directories
 from helper.sync_files_batch import sync_files_batch
 from helper.cleanup_temp_files import cleanup_temp_files
+from helper.sync_handler import AdaptiveSFTPSync
 
 import logging
 import pendulum
@@ -27,6 +28,9 @@ default_args = {
     'catchup': False,
 }
 
+# Initialize sync handler
+sync_handler = AdaptiveSFTPSync()
+
 # DAG Definition
 @dag(
         DAG_ID,
@@ -37,39 +41,51 @@ default_args = {
         tags = ['sftp', 'sync', 'data-transfer'],
 )
 def sync_processing():
-    # Task 1: Discover files recursively from source
-    @task(task_id='discover_files_task')
-    def discover_files_task() -> List:
-        files_to_sync = discover_files_recursive()
-        return files_to_sync
+    # Task: analyze source sftp files
+    @task(task_id='analyze_remote_files', pool='default_pool')
+    def analyze_files_task():
+        files_analysis = sync_handler.analyze_source_files()
+        return files_analysis
+    
+    # Task: determine sync strategy
+    #           - sequential large file
+    #           - batch small file
+    #           - over sized files
+    #           - parallel large file
+    @task.branch(task_id='determine_sync_strategy')
+    def determine_strategy_task(files_analysis):
+        return sync_handler.determine_sync_strategy(files_analysis)
 
-    # Task 2: Check which files need syncing
-    @task(task_id='check_sink_files')
-    def check_files_task(files_to_sync):
-        files_need_sync = check_sink_files(files_to_sync)
-        return files_need_sync
+    # Task: Sync strategy tasks
+    @task(task_id='batch_small_sync', pool='default_pool', queue='default',)
+    def batch_small_sync_task(files_analysis):
+        return sync_handler.sync_small_files_batch(files_analysis)
 
-    # Task 3: Create necessary directories
-    @task(task_id='create_sink_directories')
-    def create_dirs_task(files_need_sync):
-        create_sink_directories(files_need_sync)
+    # Task: sequential sync large file
+    @task(task_id='sequential_large_sync', queue='large_files', pool='large_files_pool', execution_timeout=timedelta(hours=4))
+    def sequential_large_sync_task(files_analysis):
+        return sync_handler.sync_large_files_sequential(files_analysis)
+        
+    # Task:
+    @task(task_id='parallel_large_sync', queue='large_files', pool='large_files_pool', execution_timeout=timedelta(hours=6))
+    def parallel_large_sync_task(files_analysis):
+        return sync_handler.sync_large_files_parallel(files_analysis)
+    
+    # Task: 
+    @task(task_id='handle_oversized_files', queue='monitoring')
+    def handle_oversized_task(files_analysis):
+        return sync_handler.handle_oversized_files(files_analysis)
 
-    # Task 4: Sync files
-    @task(task_id='sync_files_batch')
-    def sync_files_task(files_need_sync):
-        sync_files_batch(files_need_sync)
+    # Task dependencies
+    files_analysis = analyze_files_task()
 
-    # Task 5: Cleanup
-    @task(
-            task_id='cleanup_temp_files',
-            trigger_rule=TriggerRule.ALL_DONE
-            )
-    def cleanup_task():
-        cleanup_temp_files()
-
-    files_to_sync = discover_files_task()
-    files_need_sync = check_files_task(files_to_sync)
-    create_dirs_task(files_need_sync) >> sync_files_task(files_need_sync) >> cleanup_task()
+    # Branch to different sync strategies
+    determine_strategy_task(files_analysis) >> [
+         batch_small_sync_task(files_analysis),
+         sequential_large_sync_task(files_analysis),
+         parallel_large_sync_task(files_analysis),
+         handle_oversized_task(files_analysis)
+    ]
 
 
 sync_processing()

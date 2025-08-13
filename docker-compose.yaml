@@ -108,7 +108,7 @@ services:
 
   airflow-worker:
     <<: *airflow-common
-    command: celery worker
+    command: celery worker -q default,monitoring
     healthcheck:
       # yamllint disable rule:line-length
       test:
@@ -128,6 +128,37 @@ services:
       <<: *airflow-common-depends-on
       airflow-apiserver:
         condition: service_healthy
+      airflow-init:
+        condition: service_completed_successfully
+
+  # Specialized worker for large files
+  airflow-worker-large:
+    <<: *airflow-common
+    command: celery worker -q large_files
+    healthcheck:
+      test:
+        - "CMD-SHELL"
+        - 'celery --app airflow.providers.celery.executors.celery_executor.app inspect ping -d "celery@$${HOSTNAME}" || exit 1'
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    environment:
+      <<: *airflow-common-env
+      DUMB_INIT_SETSID: "0"
+      # Increased resources for large files
+      AIRFLOW__CELERY__WORKER_CONCURRENCY: 2
+      AIRFLOW__CELERY__TASK_SOFT_TIME_LIMIT: 7200
+      AIRFLOW__CELERY__TASK_TIME_LIMIT: 10800
+    volumes:
+      - ${AIRFLOW_PROJ_DIR:-.}/dags:/opt/airflow/dags
+      - ${AIRFLOW_PROJ_DIR:-.}/logs:/opt/airflow/logs
+      - ${AIRFLOW_PROJ_DIR:-.}/config:/opt/airflow/config
+      - ${AIRFLOW_PROJ_DIR:-.}/plugins:/opt/airflow/plugins
+      - /tmp/airflow_large:/tmp/airflow_large:rw
+    restart: always
+    depends_on:
+      <<: *airflow-common-depends-on
       airflow-init:
         condition: service_completed_successfully
 
@@ -274,4 +305,3 @@ volumes:
   postgres-db-volume:
   sftp_data_source:
   sftp_data_sink:
-
