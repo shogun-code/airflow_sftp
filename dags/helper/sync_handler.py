@@ -257,6 +257,10 @@ class AdaptiveSFTPSync:
                         # Download from source
                         logging.info(f"Downloading: {file_info['remote_path']} -> {local_temp_path}")
                         source_sftp.get(file_info['remote_path'], local_temp_path)
+
+                        # Verify file integrity
+                        if not self._verify_file_integrity(local_temp_path, file_info['size_bytes']):
+                            raise AirflowException(f"File integrity check failed for {file_info['remote_path']}")
                         
                         # Upload to destination
                         logging.info(f"Uploading: {local_temp_path} -> {file_info['sink_path']}")
