@@ -70,6 +70,19 @@ def sync_processing():
     @task(task_id='handle_oversized_files', queue='monitoring')
     def handle_oversized_task(files_analysis):
         return sync_handler.handle_oversized_files(files_analysis)
+    
+    @task(task_id='monitor_sync_progress', trigger_rule='none_failed', queue='monitoring')
+    def monitor_task(files_analysis):
+        sync_handler.monitor_sync_progress(files_analysis)
+
+    # Convergence point for all sync paths
+    @task(task_id='sync_complete', trigger_rule='none_failed')
+    def sync_complete():
+        pass
+
+    @task(task_id='cleanup_temp_files', trigger_rule='all_done')
+    def cleanup_task():
+        sync_handler.cleanup_temp_files()
 
     # Task dependencies
     files_analysis = analyze_files_task()
@@ -82,7 +95,13 @@ def sync_processing():
          handle_oversized_task(files_analysis)
     ]
 
+    # All sync tasks converge to sync_complete
+    [batch_small_sync_task(files_analysis),
+    sequential_large_sync_task(files_analysis), 
+    parallel_large_sync_task(files_analysis),
+    handle_oversized_task(files_analysis)] >> sync_complete()
 
-
+    # Monitoring and cleanup run after sync completion
+    sync_complete() >> monitor_task(files_analysis) >> cleanup_task()
 
 sync_processing()

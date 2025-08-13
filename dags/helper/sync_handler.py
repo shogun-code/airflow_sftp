@@ -179,11 +179,13 @@ class AdaptiveSFTPSync:
         if not large_files:
             raise AirflowSkipException("No large files to sync")
         
-        source_hook = SFTPHook(ssh_conn_id=SFTP_SOURCE_CONN_ID)
-        sink_hook = SFTPHook(ssh_conn_id=SFTP_SINK_CONN_ID)
+        files_need_sync = self._get_need_sink_files(large_files)
         
-        for i, file_info in enumerate(large_files):
-            self.logger.info(f"Transferring large file {i+1}/{len(large_files)}: "
+        # Create destination directory if needed
+        self.create_sink_directories(files_need_sync)
+        
+        for i, file_info in enumerate(files_need_sync):
+            self.logger.info(f"Transferring large file {i+1}/{len(files_need_sync)}: "
                            f"{file_info['remote_path']} ({file_info['size_gb']:.2f}GB)")
             
             try:
@@ -214,7 +216,7 @@ class AdaptiveSFTPSync:
         if not oversized_files:
             raise AirflowSkipException("No oversized files to handle")
         
-        self.logger.warning(f"Found {len(oversized_files)} oversized files (>{MAX_FILE_SIZE_GB}GB)")
+        logging.warning(f"Found {len(oversized_files)} oversized files (>{MAX_FILE_SIZE_GB}GB)")
         
         # Log oversized files and create manual intervention tasks
         for file_info in oversized_files:
@@ -357,6 +359,7 @@ class AdaptiveSFTPSync:
         try:
             with sink_hook.get_conn() as sftp_client:
                 for file_info in files_need_sync:
+                    logging.info(f"[large] file_info = {file_info}")
                     sink_dir = os.path.dirname(file_info['sink_path'])
                     
                     if sink_dir not in created_dirs:
@@ -419,13 +422,8 @@ class AdaptiveSFTPSync:
         sink_hook = SFTPHook(ssh_conn_id=SFTP_SINK_CONN_ID)
 
         source_path = file_info['remote_path']
-        sink_path = SINK_BASE_PATH + source_path
+        sink_path = os.path.join(SINK_BASE_PATH, file_info['relative_path']).replace('\\', '/')
         chunk_size = CHUNK_SIZE_MB * 1024 * 1024
-        
-        # Create destination directory
-        sink_dir = os.path.dirname(sink_path)
-        with sink_hook.get_conn() as sink_sftp:
-            self._ensure_directory_exists(sink_sftp, sink_dir)
         
         temp_dir = "/tmp/airflow_large"
         os.makedirs(temp_dir, exist_ok=True)
@@ -455,14 +453,14 @@ class AdaptiveSFTPSync:
                             # Progress logging
                             progress = (transferred / total_size) * 100
                             if transferred % (chunk_size * 10) == 0:  # Log every 10 chunks
-                                self.logger.info(f"Transfer progress for {source_path}: "
+                                logging.info(f"Transfer progress for {source_path}: "
                                                f"{progress:.1f}% ({transferred / (1024**3):.2f}GB)")
             
-            self.logger.info(f"Large file transfer completed: {source_path} "
+            logging.info(f"Large file transfer completed: {source_path} "
                            f"({file_info['size_gb']:.2f}GB)")
             
         except Exception as e:
-            self.logger.error(f"Chunked transfer failed for {source_path}: {str(e)}")
+            logging.error(f"Chunked transfer failed for {source_path}: {str(e)}")
             # Cleanup incomplete destination file
             try:
                 with sink_hook.get_conn() as sink_sftp:
@@ -478,7 +476,7 @@ class AdaptiveSFTPSync:
             message += f"- {file_info['remote_path']} ({file_info['size_gb']:.2f}GB)\n"
         
         # Log the message (in production, integrate with your notification system)
-        self.logger.warning(message)
+        logging.warning(message)
         
         # Store notification in XCom for potential downstream processing
         return message
@@ -500,12 +498,12 @@ class AdaptiveSFTPSync:
             sync_status['warnings'].append(anomaly['message'])
         
         # Log monitoring results
-        self.logger.info(f"Sync monitoring - Total: {sync_status['total_files']} files, "
+        logging.info(f"Sync monitoring - Total: {sync_status['total_files']} files, "
                         f"{sync_status['total_size_gb']:.2f}GB, "
                         f"{sync_status['anomalies_detected']} anomalies detected")
         
         if sync_status['warnings']:
-            self.logger.warning(f"Sync warnings: {sync_status['warnings']}")
+            logging.warning(f"Sync warnings: {sync_status['warnings']}")
         
         return sync_status
     
