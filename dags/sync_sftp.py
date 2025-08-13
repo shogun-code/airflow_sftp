@@ -47,29 +47,23 @@ def sync_processing():
     #           - batch small file
     #           - over sized files
     #           - parallel large file
-    @task.branch(task_id='determine_sync_strategy')
+    @task(task_id='determine_sync_strategy')
     def determine_strategy_task(files_analysis):
         return sync_handler.determine_sync_strategy(files_analysis)
-
-    # Task: Sync strategy tasks
-    @task(task_id='batch_small_sync', pool='default_pool', queue='default',)
-    def batch_small_sync_task(files_analysis):
-        return sync_handler.sync_small_files_batch(files_analysis)
-
-    # Task: sequential sync large file
-    @task(task_id='sequential_large_sync', queue='large_files', pool='large_files_pool', execution_timeout=timedelta(hours=4))
-    def sequential_large_sync_task(files_analysis):
-        return sync_handler.sync_large_files_sequential(files_analysis)
-        
-    # Task:
-    @task(task_id='parallel_large_sync', queue='large_files', pool='large_files_pool', execution_timeout=timedelta(hours=6))
-    def parallel_large_sync_task(files_analysis):
-        return sync_handler.sync_large_files_parallel(files_analysis)
     
-    # Task: 
-    @task(task_id='handle_oversized_files', queue='monitoring')
-    def handle_oversized_task(files_analysis):
-        return sync_handler.handle_oversized_files(files_analysis)
+     # Generic sync task that handles different strategy types
+    @task(task_id='execute_sync_strategy')
+    def execute_sync_strategy_task(strategy_name, files_analysis):
+        if strategy_name == 'batch_small_sync':
+            return sync_handler.sync_small_files_batch(files_analysis)
+        elif strategy_name == 'sequential_large_sync':
+            return sync_handler.sync_large_files_sequential(files_analysis)
+        elif strategy_name == 'parallel_large_sync':
+            return sync_handler.sync_large_files_parallel(files_analysis)
+        elif strategy_name == 'handle_oversized_files':
+            return sync_handler.handle_oversized_files(files_analysis)
+        else:
+            raise ValueError(f"Unknown strategy: {strategy_name}")
     
     @task(task_id='monitor_sync_progress', trigger_rule='none_failed', queue='monitoring')
     def monitor_task(files_analysis):
@@ -88,20 +82,16 @@ def sync_processing():
     files_analysis = analyze_files_task()
 
     # Branch to different sync strategies
-    determine_strategy_task(files_analysis) >> [
-         batch_small_sync_task(files_analysis),
-         sequential_large_sync_task(files_analysis),
-         parallel_large_sync_task(files_analysis),
-         handle_oversized_task(files_analysis)
-    ]
+    strategies = determine_strategy_task(files_analysis)
 
-    # All sync tasks converge to sync_complete
-    [batch_small_sync_task(files_analysis),
-    sequential_large_sync_task(files_analysis), 
-    parallel_large_sync_task(files_analysis),
-    handle_oversized_task(files_analysis)] >> sync_complete()
+    # Dynamic task mapping - creates one task per strategy
+    sync_tasks = execute_sync_strategy_task.expand(
+        strategy_name=strategies,
+        files_analysis=[files_analysis] * len(strategies) if isinstance(strategies, list) else [files_analysis]
+    )
+
 
     # Monitoring and cleanup run after sync completion
-    sync_complete() >> monitor_task(files_analysis) >> cleanup_task()
+    sync_tasks >> monitor_task(files_analysis) >> cleanup_task()
 
 sync_processing()

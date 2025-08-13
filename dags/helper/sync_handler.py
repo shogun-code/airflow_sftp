@@ -123,6 +123,7 @@ class AdaptiveSFTPSync:
     
     def determine_sync_strategy(self, files_analysis) -> str:
         """Determine the appropriate sync strategy based on file analysis."""
+        strategies = []
         
         total_large_files = len(files_analysis['large_files'])
         total_oversized_files = len(files_analysis['oversized_files'])
@@ -133,15 +134,17 @@ class AdaptiveSFTPSync:
         
         # Handle oversized files separately
         if total_oversized_files > 0:
-            return 'handle_oversized_files'
+            strategies.append('handle_oversized_files')
         
         # Strategy selection based on file distribution and total size
         if total_large_files > 10 or total_size_gb > 50:
-            return 'parallel_large_sync'
-        elif total_large_files > 0:
-            return 'sequential_large_sync'
+            strategies.append('parallel_large_sync')
+        if total_large_files > 0:
+            strategies.append('sequential_large_sync')
         else:
-            return 'batch_small_sync'
+            strategies.append('batch_small_sync')
+        
+        return strategies
     
     def sync_small_files_batch(self, files_analysis):
         """Sync small files in batches for efficiency."""
