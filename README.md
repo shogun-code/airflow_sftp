@@ -34,9 +34,6 @@ echo "_AIRFLOW_WWW_USER_PASSWORD=airflow" >> .env
 # Start all services
 docker compose --profile flower up
 
-# Wait for initialization (2-3 minutes)
-docker compose logs -f airflow-init
-
 # Verify all services are running
 docker compose ps
 ```
@@ -134,8 +131,6 @@ Navigate to **Admin → Pools** and verify:
 
 ### Processing Strategies
 
-## Anomaly Detection & Handling
-
 ### 1. File Size Anomalies
 
 The system automatically detects and categorizes files based on size thresholds:
@@ -154,7 +149,7 @@ Strategy: Batch Processing
 - Queue: 'default'
 - Worker Pool: default_pool (high concurrency)
 - Batch Size: 50 files per batch
-- Features: Compression enabled, fast parallel transfers
+- Features: Compression enabled, fast parallel transfers, integrity checks
 ```
 
 #### Large File Handling (1GB to 10GB)
@@ -185,7 +180,6 @@ Strategy: Manual Intervention
 - **Purpose**: Handle small to medium files
 - **Concurrency**: 4 workers per node
 - **Queue**: 'default', 'monitoring'
-- **Timeout**: 1 hour soft, 2 hours hard
 - **Memory**: Standard allocation
 
 #### Large File Workers
@@ -193,7 +187,6 @@ Strategy: Manual Intervention
 - **Purpose**: Handle files 1GB-10GB
 - **Concurrency**: 2 workers per node (fewer but more resources)
 - **Queue**: 'large_files'
-- **Timeout**: 2 hours soft, 3 hours hard
 - **Memory**: High allocation with dedicated temp storage
 
 ### 2. Dynamic Resource Allocation

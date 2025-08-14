@@ -8,7 +8,6 @@ SFTP_SINK_CONN_ID = "sftp_sink"
 SOURCE_BASE_PATH = Variable.get("SOURCE_BASE_PATH", "/upload")
 SINK_BASE_PATH = Variable.get("SINK_BASE_PATH", "/dest/data")
 TEMP_LOCAL_PATH = Variable.get("TEMP_LOCAL_PATH", "/tmp/sftp_sync")
-
 TEMP_LOCAL_PATH = "/tmp/sftp_sync"
 BATCH_SIZE = int(Variable.get("BATCH_SIZE", "50"))  # Files per batch
 CHUNK_SIZE_MB = int(Variable.get('CHUNK_SIZE_MB', 64))
