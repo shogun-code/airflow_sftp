@@ -59,7 +59,7 @@ class AdaptiveSFTPSync:
                         files_analysis['large_files'].append(file_info)
                     else:
                         files_analysis['oversized_files'].append(file_info)
-                        self.logger.warning(f"Oversized file detected: {file_path} ({file_size_gb:.2f}GB)")
+                        logging.warning(f"Oversized file detected: {file_path} ({file_size_gb:.2f}GB)")
                     
                     files_analysis['total_size'] += file_size_bytes
                     files_analysis['file_count'] += 1
@@ -67,13 +67,13 @@ class AdaptiveSFTPSync:
                     # Detect anomalies
                     self._detect_anomalies(file_info, files_analysis['anomalies'])
             
-            self.logger.info(f"File analysis complete: {files_analysis['file_count']} files, "
+            logging.info(f"File analysis complete: {files_analysis['file_count']} files, "
                            f"{files_analysis['total_size'] / (1024**3):.2f}GB total")
             
             return files_analysis
             
         except Exception as e:
-            self.logger.error(f"Error analyzing remote files: {str(e)}")
+            logging.error(f"Error analyzing remote files: {str(e)}")
             raise AirflowException(f"File analysis failed: {str(e)}")
     
     def _discover_files_recursive(self, sftp, path: str) -> List[Tuple[str, Any]]:
@@ -89,7 +89,7 @@ class AdaptiveSFTPSync:
                 else:
                     files.append((item_path, item))
         except Exception as e:
-            self.logger.warning(f"Error accessing {path}: {str(e)}")
+            logging.warning(f"Error accessing {path}: {str(e)}")
         return files
     
     def _detect_anomalies(self, file_info: Dict, anomalies: List):
@@ -121,15 +121,16 @@ class AdaptiveSFTPSync:
                 'message': "File has future modification timestamp"
             })
     
-    def determine_sync_strategy(self, files_analysis) -> str:
+    def determine_sync_strategy(self, files_analysis):
         """Determine the appropriate sync strategy based on file analysis."""
         strategies = []
         
+        total_small_files = len(files_analysis['small_files'] + files_analysis['medium_files'])
         total_large_files = len(files_analysis['large_files'])
         total_oversized_files = len(files_analysis['oversized_files'])
         total_size_gb = files_analysis['total_size'] / (1024**3)
         
-        self.logger.info(f"Determining strategy for {files_analysis['file_count']} files, "
+        logging.info(f"Determining strategy for {files_analysis['file_count']} files, "
                         f"{total_size_gb:.2f}GB total, {total_large_files} large files")
         
         # Handle oversized files separately
@@ -141,7 +142,7 @@ class AdaptiveSFTPSync:
             strategies.append('parallel_large_sync')
         if total_large_files > 0:
             strategies.append('sequential_large_sync')
-        else:
+        if total_small_files > 0:
             strategies.append('batch_small_sync')
         
         return strategies
@@ -161,7 +162,7 @@ class AdaptiveSFTPSync:
         # Create destination directory if needed
         self.create_sink_directories(files_need_sync)
         
-        batch_size = 50  # Process 50 files at a time
+        batch_size = BATCH_SIZE  # Process 50 files at a time
         
         for i in range(0, len(files_need_sync), batch_size):
             batch = files_need_sync[i:i + batch_size]
@@ -188,14 +189,14 @@ class AdaptiveSFTPSync:
         self.create_sink_directories(files_need_sync)
         
         for i, file_info in enumerate(files_need_sync):
-            self.logger.info(f"Transferring large file {i+1}/{len(files_need_sync)}: "
+            logging.info(f"Transferring large file {i+1}/{len(files_need_sync)}: "
                            f"{file_info['remote_path']} ({file_info['size_gb']:.2f}GB)")
             
             try:
                 # Use chunked transfer for large files
                 self._transfer_large_file_chunked(file_info)
             except Exception as e:
-                self.logger.error(f"Failed to transfer large file {file_info['remote_path']}: {str(e)}")
+                logging.error(f"Failed to transfer large file {file_info['remote_path']}: {str(e)}")
                 raise AirflowException(f"Large file transfer failed: {str(e)}")
     
     def sync_large_files_parallel(self, files_analysis):
@@ -206,7 +207,7 @@ class AdaptiveSFTPSync:
             raise AirflowSkipException("No large files to sync in parallel")
         
         # This task is routed to the large_files queue with specialized workers
-        self.logger.info(f"Starting parallel sync of {len(large_files)} large files")
+        logging.info(f"Starting parallel sync of {len(large_files)} large files")
         
         # Create individual transfer tasks
         for file_info in large_files:
@@ -223,7 +224,7 @@ class AdaptiveSFTPSync:
         
         # Log oversized files and create manual intervention tasks
         for file_info in oversized_files:
-            self.logger.warning(f"Oversized file requires manual intervention: "
+            logging.warning(f"Oversized file requires manual intervention: "
                               f"{file_info['remote_path']} ({file_info['size_gb']:.2f}GB)")
             
             # Store in XCom for manual processing workflow
@@ -519,6 +520,6 @@ class AdaptiveSFTPSync:
                 import shutil
                 try:
                     shutil.rmtree(temp_dir)
-                    self.logger.info(f"Cleaned up temporary directory: {temp_dir}")
+                    logging.info(f"Cleaned up temporary directory: {temp_dir}")
                 except Exception as e:
-                    self.logger.warning(f"Failed to clean up {temp_dir}: {str(e)}")
+                    logging.warning(f"Failed to clean up {temp_dir}: {str(e)}")
