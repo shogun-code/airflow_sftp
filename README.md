@@ -171,6 +171,26 @@ Strategy: Manual Intervention
 - Requires: Operator approval and strategy selection
 ```
 
+### 3. Sync Strategies
+The system incorporates intelligent synchronization to ensure data consistency between the source and sink locations. Below are the key strategies employed:
+#### Sync if source file is newer or different size compared to sink file
+- **Comparison Criteria**:  
+  The system compares the **last modified timestamp** and **file size** of the source and sink files.  
+  - If the source file is **newer** or has a **different size** than the sink file, it is flagged for synchronization.  
+  - Redundant transfers are avoided if the source and sink files are identical.
+
+- **Processing Workflow**:  
+  1. Retrieve metadata (size, timestamps) from both source and sink.  
+  2. Evaluate differences.  
+  3. Queue files needing synchronization.  
+  4. Execute transfer using the appropriate processing strategy based on file size (as defined above).  
+
+#### Sync if file doesn't exist at sink
+- **Handling Missing Files**:  
+  If the sink location does not contain a file present in the source:  
+  - The file is automatically marked for transfer.  
+  - The appropriate strategy is chosen based on the file size.  
+
 ## Scaling Architecture
 
 ### 1. Celery Worker Specialization
